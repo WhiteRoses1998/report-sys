@@ -1,0 +1,306 @@
+import React, { useState } from 'react';
+import { Send, CheckCircle } from 'lucide-react';
+
+const RepairForm = () => {
+  const [formData, setFormData] = useState({
+    employeeId: '',
+    department: '',
+    location: '',
+    customLocation: '',
+    lane: '',
+    description: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // ข้อมูลแผนกและสถานที่
+  const departments = [
+    { value: 'it', label: 'IT' },
+    { value: 'hr', label: 'HR' },
+    { value: 'production', label: 'Production' },
+    { value: 'maintenance', label: 'Maintenance' }
+  ];
+
+  const locationsByDept = {
+    it: ['Server Room', 'IT Office Floor 1', 'IT Office Floor 2', 'Network Center', 'อื่นๆ'],
+    hr: ['HR Office', 'Training Room', 'Reception', 'Meeting Room A', 'อื่นๆ'],
+    production: ['Production Line 1', 'Production Line 2', 'Warehouse', 'Quality Control', 'อื่นๆ'],
+    maintenance: ['Workshop', 'Tool Storage', 'Maintenance Office', 'Equipment Room', 'อื่นๆ']
+  };
+
+  const lanes = ['Lane A', 'Lane B', 'Lane C', 'Lane D', 'Lane E'];
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    
+    // จำกัดรหัสพนักงานเป็นตัวเลข 5 หลัก
+    if (name === 'employeeId') {
+      const numValue = value.replace(/\D/g, '').slice(0, 5);
+      setFormData(prev => ({ ...prev, [name]: numValue }));
+      return;
+    }
+
+    // รีเซ็ตสถานที่เมื่อเปลี่ยนแผนก
+    if (name === 'department') {
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value, 
+        location: '',
+        customLocation: '',
+        lane: ''
+      }));
+      return;
+    }
+
+    // รีเซ็ต customLocation และ lane เมื่อเลือกสถานที่
+    if (name === 'location') {
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        customLocation: '',
+        lane: value === 'อื่นๆ' ? '' : prev.lane
+      }));
+      return;
+    }
+
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+
+    // สร้าง timestamp
+    const timestamp = new Date().toLocaleString('th-TH', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+
+    // กำหนดสถานที่สุดท้าย
+    const finalLocation = formData.location === 'อื่นๆ' 
+      ? formData.customLocation 
+      : formData.location;
+
+    // เตรียมข้อมูลส่ง
+    const dataToSubmit = {
+      employeeId: formData.employeeId,
+      department: departments.find(d => d.value === formData.department)?.label || '',
+      location: finalLocation,
+      lane: formData.location === 'อื่นๆ' ? '-' : formData.lane,
+      description: formData.description,
+      timestamp: timestamp,
+      status: 'รับแจ้ง'
+    };
+
+    console.log('ข้อมูลที่จะส่ง:', dataToSubmit);
+
+    try {
+      const response = await fetch(process.env.REACT_APP_GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dataToSubmit)
+      });
+
+      setSubmitSuccess(true);
+      
+      // รีเซ็ตฟอร์มหลัง 3 วินาที
+      setTimeout(() => {
+        setFormData({
+          employeeId: '',
+          department: '',
+          location: '',
+          customLocation: '',
+          lane: '',
+          description: ''
+        });
+        setSubmitSuccess(false);
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error:', error);
+      alert('เกิดข้อผิดพลาดในการส่งข้อมูล');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isFormValid = () => {
+    if (!formData.employeeId || formData.employeeId.length !== 5) return false;
+    if (!formData.department) return false;
+    if (formData.location === 'อื่นๆ') {
+      return formData.customLocation.trim() !== '' && formData.description.trim() !== '';
+    }
+    if (!formData.location) return false;
+    if (!formData.lane) return false;
+    if (!formData.description.trim()) return false;
+    return true;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">ระบบแจ้งซ่อม</h1>
+            <p className="text-gray-600">กรุณากรอกข้อมูลให้ครบถ้วน</p>
+          </div>
+
+          {submitSuccess ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <CheckCircle className="w-20 h-20 text-green-500 mb-4" />
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">ส่งข้อมูลสำเร็จ!</h2>
+              <p className="text-gray-600">ระบบได้รับการแจ้งซ่อมของคุณแล้ว</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* รหัสพนักงาน */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  รหัสพนักงาน <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="employeeId"
+                  value={formData.employeeId}
+                  onChange={handleInputChange}
+                  placeholder="กรอก 5 หลัก"
+                  maxLength="5"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  required
+                />
+              </div>
+
+              {/* แผนก */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  แผนก <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="department"
+                  value={formData.department}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  required
+                >
+                  <option value="">-- เลือกแผนก --</option>
+                  {departments.map(dept => (
+                    <option key={dept.value} value={dept.value}>
+                      {dept.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* สถานที่ */}
+              {formData.department && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    สถานที่ <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="location"
+                    value={formData.location}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    required
+                  >
+                    <option value="">-- เลือกสถานที่ --</option>
+                    {locationsByDept[formData.department]?.map(loc => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* สถานที่อื่นๆ */}
+              {formData.location === 'อื่นๆ' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    ระบุสถานที่ <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="customLocation"
+                    value={formData.customLocation}
+                    onChange={handleInputChange}
+                    placeholder="กรอกสถานที่"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* ด่าน/เลน */}
+              {formData.location && formData.location !== 'อื่นๆ' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    ด่าน/เลน <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="lane"
+                    value={formData.lane}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    required
+                  >
+                    <option value="">-- เลือกด่าน/เลน --</option>
+                    {lanes.map(lane => (
+                      <option key={lane} value={lane}>
+                        {lane}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* อาการแจ้งซ่อม */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  อาการแจ้งซ่อม <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="อธิบายรายละเอียดอาการที่ต้องการแจ้งซ่อม"
+                  rows="4"
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
+                  required
+                />
+              </div>
+
+              {/* ปุ่มส่ง */}
+              <button
+                onClick={handleSubmit}
+                disabled={!isFormValid() || isSubmitting}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-4 rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 shadow-lg"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    กำลังส่งข้อมูล...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-5 h-5" />
+                    ส่งแจ้งซ่อม
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RepairForm;
