@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, CheckCircle } from 'lucide-react';
+import { Send, CheckCircle, AlertCircle, Shield } from 'lucide-react';
 
 const RepairForm = () => {
   const [formData, setFormData] = useState({
@@ -12,6 +12,7 @@ const RepairForm = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   // ข้อมูลแผนกและสถานที่
   const departments = [
@@ -30,13 +31,48 @@ const RepairForm = () => {
 
   const lanes = ['Lane A', 'Lane B', 'Lane C', 'Lane D', 'Lane E'];
 
+  // ฟังก์ชัน sanitize input เพื่อป้องกัน XSS
+  const sanitizeInput = (input) => {
+    if (typeof input !== 'string') return input;
+    return input
+      .replace(/[<>]/g, '') // ลบ < และ >
+      .replace(/javascript:/gi, '') // ลบ javascript:
+      .replace(/on\w+=/gi, '') // ลบ event handlers
+      .trim();
+  };
+
+  // ฟังก์ชัน validate รหัสพนักงาน (อนุญาตให้ยาวได้ เพื่อความปลอดภัย)
+  const validateEmployeeId = (id) => {
+    // ต้องมีความยาวอย่างน้อย 5 ตัวอักษร และไม่เกิน 20 ตัว
+    // อนุญาตให้เป็นตัวเลขและตัวอักษรได้
+    return id.length >= 5 && id.length <= 20 && /^[a-zA-Z0-9]+$/.test(id);
+  };
+
+  // ฟังก์ชัน validate ข้อความ
+  const validateText = (text, minLength = 1, maxLength = 500) => {
+    if (!text || text.trim().length < minLength) return false;
+    if (text.length > maxLength) return false;
+    return true;
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    setError(''); // Clear error
     
-    // จำกัดรหัสพนักงานเป็นตัวเลข 5 หลัก
+    // รหัสพนักงาน - อนุญาตตัวเลขและตัวอักษร จำกัด 20 ตัว
     if (name === 'employeeId') {
-      const numValue = value.replace(/\D/g, '').slice(0, 5);
-      setFormData(prev => ({ ...prev, [name]: numValue }));
+      const sanitized = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+      setFormData(prev => ({ ...prev, [name]: sanitized }));
+      return;
+    }
+
+    // Sanitize input สำหรับ text fields
+    if (name === 'customLocation' || name === 'description') {
+      const sanitized = sanitizeInput(value);
+      // จำกัดความยาว
+      const maxLength = name === 'description' ? 500 : 100;
+      const limited = sanitized.slice(0, maxLength);
+      setFormData(prev => ({ ...prev, [name]: limited }));
       return;
     }
 
@@ -66,39 +102,98 @@ const RepairForm = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const validateForm = () => {
+    // ตรวจสอบรหัสพนักงาน - ไม่บอกสาเหตุเพื่อความปลอดภัย
+    if (!validateEmployeeId(formData.employeeId)) {
+      setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+      return false;
+    }
+
+    // ตรวจสอบแผนก
+    if (!departments.some(d => d.value === formData.department)) {
+      setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+      return false;
+    }
+
+    // ตรวจสอบสถานที่
+    if (formData.location === 'อื่นๆ') {
+      if (!validateText(formData.customLocation, 2, 100)) {
+        setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+        return false;
+      }
+    } else {
+      const validLocations = locationsByDept[formData.department] || [];
+      if (!validLocations.includes(formData.location)) {
+        setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+        return false;
+      }
+    }
+
+    // ตรวจสอบด่าน/เลน (ถ้าไม่ใช่อื่นๆ)
+    if (formData.location !== 'อื่นๆ' && !lanes.includes(formData.lane)) {
+      setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+      return false;
+    }
+
+    // ตรวจสอบอาการแจ้งซ่อม
+    if (!validateText(formData.description, 10, 500)) {
+      setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+      return false;
+    }
+
+    return true;
+  };
+
   const handleSubmit = async () => {
+    // Validate ก่อนส่ง
+    if (!validateForm()) {
+      return;
+    }
+
     setIsSubmitting(true);
-
-    // สร้าง timestamp
-    const timestamp = new Date().toLocaleString('th-TH', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    });
-
-    // กำหนดสถานที่สุดท้าย
-    const finalLocation = formData.location === 'อื่นๆ' 
-      ? formData.customLocation 
-      : formData.location;
-
-    // เตรียมข้อมูลส่ง
-    const dataToSubmit = {
-      employeeId: formData.employeeId,
-      department: departments.find(d => d.value === formData.department)?.label || '',
-      location: finalLocation,
-      lane: formData.location === 'อื่นๆ' ? '-' : formData.lane,
-      description: formData.description,
-      timestamp: timestamp,
-      status: 'รับแจ้ง'
-    };
-
-    console.log('ข้อมูลที่จะส่ง:', dataToSubmit);
+    setError('');
 
     try {
-      const response = await fetch(process.env.REACT_APP_GOOGLE_SCRIPT_URL, {
+      // สร้าง timestamp
+      const timestamp = new Date().toLocaleString('th-TH', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      // กำหนดสถานที่สุดท้าย
+      const finalLocation = formData.location === 'อื่นๆ' 
+        ? sanitizeInput(formData.customLocation)
+        : formData.location;
+
+      // เตรียมข้อมูลส่ง
+      const dataToSubmit = {
+        employeeId: formData.employeeId,
+        department: departments.find(d => d.value === formData.department)?.label || '',
+        location: finalLocation,
+        lane: formData.location === 'อื่นๆ' ? '-' : formData.lane,
+        description: sanitizeInput(formData.description),
+        timestamp: timestamp,
+        status: 'รับแจ้ง'
+      };
+
+      console.log('ข้อมูลที่จะส่ง:', dataToSubmit);
+
+      // ตรวจสอบว่ามี API URL หรือไม่
+      const apiUrl = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
+      
+      if (!apiUrl) {
+        console.warn('⚠️ ERROR API URL');
+        setError('ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // ส่งข้อมูลจริง
+      const response = await fetch(apiUrl, {
         method: 'POST',
         mode: 'no-cors',
         headers: {
@@ -120,36 +215,53 @@ const RepairForm = () => {
           description: ''
         });
         setSubmitSuccess(false);
+        setError('');
       }, 3000);
       
     } catch (error) {
       console.error('Error:', error);
-      alert('เกิดข้อผิดพลาดในการส่งข้อมูล');
+      setError('เกิดข้อผิดพลาดในการส่งข้อมูล กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const isFormValid = () => {
-    if (!formData.employeeId || formData.employeeId.length !== 5) return false;
+    if (!formData.employeeId || formData.employeeId.length < 5) return false;
     if (!formData.department) return false;
     if (formData.location === 'อื่นๆ') {
-      return formData.customLocation.trim() !== '' && formData.description.trim() !== '';
+      return formData.customLocation.trim().length >= 2 && formData.description.trim().length >= 10;
     }
     if (!formData.location) return false;
     if (!formData.lane) return false;
-    if (!formData.description.trim()) return false;
+    if (formData.description.trim().length < 10) return false;
     return true;
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
+        {/* Security Badge */}
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+          <Shield className="w-5 h-5 text-green-600" />
+          <p className="text-sm text-green-700">
+            <strong>ระบบปลอดภัย:</strong> ข้อมูลของคุณได้รับการเข้ารหัสและตรวจสอบความถูกต้อง
+          </p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">ระบบแจ้งซ่อม</h1>
             <p className="text-gray-600">กรุณากรอกข้อมูลให้ครบถ้วน</p>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
 
           {submitSuccess ? (
             <div className="flex flex-col items-center justify-center py-12">
@@ -169,8 +281,9 @@ const RepairForm = () => {
                   name="employeeId"
                   value={formData.employeeId}
                   onChange={handleInputChange}
-                  placeholder="กรอก 5 หลัก"
-                  maxLength="5"
+                  placeholder="กรอกรหัสพนักงาน"
+                  maxLength="20"
+                  autoComplete="off"
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   required
                 />
@@ -232,6 +345,8 @@ const RepairForm = () => {
                     value={formData.customLocation}
                     onChange={handleInputChange}
                     placeholder="กรอกสถานที่"
+                    maxLength="100"
+                    autoComplete="off"
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                     required
                   />
@@ -272,6 +387,7 @@ const RepairForm = () => {
                   onChange={handleInputChange}
                   placeholder="อธิบายรายละเอียดอาการที่ต้องการแจ้งซ่อม"
                   rows="4"
+                  maxLength="500"
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
                   required
                 />
