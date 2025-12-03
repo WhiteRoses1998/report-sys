@@ -29,7 +29,32 @@ const RepairForm = () => {
     maintenance: ['Workshop', 'Tool Storage', 'Maintenance Office', 'Equipment Room', 'อื่นๆ']
   };
 
-  const lanes = ['Lane A', 'Lane B', 'Lane C', 'Lane D', 'Lane E'];
+  // ด่าน/เลน แยกตามสถานที่
+  const lanesByLocation = {
+    // IT Department
+    'Server Room': ['Lane 1', 'Lane 2', 'Lane 3', 'Lane 4', 'Lane 5'],
+    'IT Office Floor 1': ['Zone A', 'Zone B', 'Zone C'],
+    'IT Office Floor 2': ['Zone D', 'Zone E', 'Zone F'],
+    'Network Center': ['Network 01', 'Network 02', 'Network 03', 'Network 04'],
+    
+    // HR Department
+    'HR Office': ['Desk 1-10', 'Desk 11-20', 'Desk 21-30'],
+    'Training Room': ['Room A', 'Room B', 'Room C'],
+    'Reception': ['Counter 1', 'Counter 2', 'Counter 3'],
+    'Meeting Room A': ['Table 1', 'Table 2', 'Table 3'],
+    
+    // Production Department
+    'Production Line 1': ['Station A1', 'Station A2', 'Station A3', 'Station A4'],
+    'Production Line 2': ['Station B1', 'Station B2', 'Station B3', 'Station B4'],
+    'Warehouse': ['Section 1', 'Section 2', 'Section 3', 'Section 4'],
+    'Quality Control': ['QC-1', 'QC-2', 'QC-3'],
+    
+    // Maintenance Department
+    'Workshop': ['Bay 1', 'Bay 2', 'Bay 3', 'Bay 4'],
+    'Tool Storage': ['Shelf A', 'Shelf B', 'Shelf C', 'Shelf D'],
+    'Maintenance Office': ['Area 1', 'Area 2', 'Area 3'],
+    'Equipment Room': ['Rack 1', 'Rack 2', 'Rack 3', 'Rack 4']
+  };
 
   // ฟังก์ชัน sanitize input เพื่อป้องกัน XSS
   const sanitizeInput = (input) => {
@@ -41,11 +66,9 @@ const RepairForm = () => {
       .trim();
   };
 
-  // ฟังก์ชัน validate รหัสพนักงาน (อนุญาตให้ยาวได้ เพื่อความปลอดภัย)
+  // ฟังก์ชัน validate รหัสพนักงาน
   const validateEmployeeId = (id) => {
-    // ต้องมีความยาวอย่างน้อย 5 ตัวอักษร และไม่เกิน 20 ตัว
-    // อนุญาตให้เป็นตัวเลขและตัวอักษรได้
-    return id.length >= 5 && id.length <= 20 && /^[a-zA-Z0-9]+$/.test(id);
+    return /^\d{5}$/.test(id);
   };
 
   // ฟังก์ชัน validate ข้อความ
@@ -59,10 +82,9 @@ const RepairForm = () => {
     const { name, value } = e.target;
     setError(''); // Clear error
     
-    // รหัสพนักงาน - อนุญาตตัวเลขและตัวอักษร จำกัด 20 ตัว
+    // รหัสพนักงาน 
     if (name === 'employeeId') {
-      const sanitized = value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
-      setFormData(prev => ({ ...prev, [name]: sanitized }));
+      setFormData(prev => ({ ...prev, [name]: value }));
       return;
     }
 
@@ -103,7 +125,7 @@ const RepairForm = () => {
   };
 
   const validateForm = () => {
-    // ตรวจสอบรหัสพนักงาน - ไม่บอกสาเหตุเพื่อความปลอดภัย
+    // ตรวจสอบรหัสพนักงาน
     if (!validateEmployeeId(formData.employeeId)) {
       setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
       return false;
@@ -130,9 +152,12 @@ const RepairForm = () => {
     }
 
     // ตรวจสอบด่าน/เลน (ถ้าไม่ใช่อื่นๆ)
-    if (formData.location !== 'อื่นๆ' && !lanes.includes(formData.lane)) {
-      setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
-      return false;
+    if (formData.location !== 'อื่นๆ') {
+      const validLanes = lanesByLocation[formData.location] || [];
+      if (!validLanes.includes(formData.lane)) {
+        setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
+        return false;
+      }
     }
 
     // ตรวจสอบอาการแจ้งซ่อม
@@ -186,7 +211,7 @@ const RepairForm = () => {
       const apiUrl = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
       
       if (!apiUrl) {
-        console.warn('⚠️ ERROR API URL');
+        console.warn('⚠️ ยังไม่ได้ตั้งค่า REACT_APP_GOOGLE_SCRIPT_URL ใน .env');
         setError('ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
         setIsSubmitting(false);
         return;
@@ -227,7 +252,7 @@ const RepairForm = () => {
   };
 
   const isFormValid = () => {
-    if (!formData.employeeId || formData.employeeId.length < 5) return false;
+    if (!formData.employeeId || formData.employeeId.trim() === '') return false;
     if (!formData.department) return false;
     if (formData.location === 'อื่นๆ') {
       return formData.customLocation.trim().length >= 2 && formData.description.trim().length >= 10;
@@ -274,7 +299,6 @@ const RepairForm = () => {
                   value={formData.employeeId}
                   onChange={handleInputChange}
                   placeholder="กรอกรหัสพนักงาน"
-                  maxLength="20"
                   autoComplete="off"
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   required
@@ -359,7 +383,7 @@ const RepairForm = () => {
                     required
                   >
                     <option value="">-- เลือกด่าน/เลน --</option>
-                    {lanes.map(lane => (
+                    {(lanesByLocation[formData.location] || []).map(lane => (
                       <option key={lane} value={lane}>
                         {lane}
                       </option>
