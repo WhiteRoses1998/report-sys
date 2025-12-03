@@ -81,9 +81,7 @@ const RepairForm = () => {
   };
 
   // ฟังก์ชัน validate รหัสพนักงาน
-  // จริงๆ ต้องเป็นตัวเลข 5 หลักพอดี แต่ไม่บอก user
   const validateEmployeeId = (id) => {
-    // ต้องเป็นตัวเลข 5 หลักพอดี
     return /^\d{5}$/.test(id);
   };
 
@@ -98,9 +96,8 @@ const RepairForm = () => {
     const { name, value } = e.target;
     setError(''); // Clear error
     
-    // รหัสพนักงาน - อนุญาตให้กรอกอะไรก็ได้ ไม่จำกัด (เพื่อไม่เปิดเผยรูปแบบ)
+    // รหัสพนักงาน
     if (name === 'employeeId') {
-      // ไม่กรอง ไม่จำกัด ให้กรอกอะไรก็ได้
       setFormData(prev => ({ ...prev, [name]: value }));
       return;
     }
@@ -148,7 +145,7 @@ const RepairForm = () => {
       return false;
     }
 
-    // ตรวจสอบรหัสพนักงาน - ไม่บอกสาเหตุเพื่อความปลอดภัย
+    // ตรวจสอบรหัสพนักงาน
     if (!validateEmployeeId(formData.employeeId)) {
       setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
       return false;
@@ -304,14 +301,6 @@ const RepairForm = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        {/* Security Badge */}
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-          <Shield className="w-5 h-5 text-green-600" />
-          <p className="text-sm text-green-700">
-            <strong>ระบบปลอดภัย:</strong> ข้อมูลของคุณได้รับการเข้ารหัสและตรวจสอบความถูกต้อง
-          </p>
-        </div>
-
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">ระบบแจ้งซ่อม</h1>
