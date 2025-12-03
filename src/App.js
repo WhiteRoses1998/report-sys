@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Send, CheckCircle, AlertCircle, Shield } from 'lucide-react';
 
 const RepairForm = () => {
@@ -13,6 +13,20 @@ const RepairForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+
+  // Load Turnstile script
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
 
   // ข้อมูลแผนกและสถานที่
   const departments = [
@@ -67,7 +81,9 @@ const RepairForm = () => {
   };
 
   // ฟังก์ชัน validate รหัสพนักงาน
+  // จริงๆ ต้องเป็นตัวเลข 5 หลักพอดี แต่ไม่บอก user
   const validateEmployeeId = (id) => {
+    // ต้องเป็นตัวเลข 5 หลักพอดี
     return /^\d{5}$/.test(id);
   };
 
@@ -82,8 +98,9 @@ const RepairForm = () => {
     const { name, value } = e.target;
     setError(''); // Clear error
     
-    // รหัสพนักงาน 
+    // รหัสพนักงาน - อนุญาตให้กรอกอะไรก็ได้ ไม่จำกัด (เพื่อไม่เปิดเผยรูปแบบ)
     if (name === 'employeeId') {
+      // ไม่กรอง ไม่จำกัด ให้กรอกอะไรก็ได้
       setFormData(prev => ({ ...prev, [name]: value }));
       return;
     }
@@ -125,7 +142,13 @@ const RepairForm = () => {
   };
 
   const validateForm = () => {
-    // ตรวจสอบรหัสพนักงาน
+    // ตรวจสอบ Turnstile token
+    if (!turnstileToken) {
+      setError('กรุณายืนยันว่าคุณไม่ใช่บอท');
+      return false;
+    }
+
+    // ตรวจสอบรหัสพนักงาน - ไม่บอกสาเหตุเพื่อความปลอดภัย
     if (!validateEmployeeId(formData.employeeId)) {
       setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
       return false;
@@ -202,7 +225,8 @@ const RepairForm = () => {
         lane: formData.location === 'อื่นๆ' ? '-' : formData.lane,
         description: sanitizeInput(formData.description),
         timestamp: timestamp,
-        status: 'รับแจ้ง'
+        status: 'รับแจ้ง',
+        turnstileToken: turnstileToken // เพิ่ม token
       };
 
       console.log('ข้อมูลที่จะส่ง:', dataToSubmit);
@@ -211,7 +235,7 @@ const RepairForm = () => {
       const apiUrl = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
       
       if (!apiUrl) {
-        console.warn('⚠️ ERROR API URL');
+        console.warn('⚠️ ยังไม่ได้ตั้งค่า REACT_APP_GOOGLE_SCRIPT_URL ใน .env');
         setError('ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
         setIsSubmitting(false);
         return;
@@ -228,6 +252,12 @@ const RepairForm = () => {
       });
 
       setSubmitSuccess(true);
+      
+      // รีเซ็ต Turnstile
+      if (window.turnstile) {
+        window.turnstile.reset();
+      }
+      setTurnstileToken('');
       
       // รีเซ็ตฟอร์มหลัง 3 วินาที
       setTimeout(() => {
@@ -255,17 +285,33 @@ const RepairForm = () => {
     if (!formData.employeeId || formData.employeeId.trim() === '') return false;
     if (!formData.department) return false;
     if (formData.location === 'อื่นๆ') {
-      return formData.customLocation.trim().length >= 2 && formData.description.trim().length >= 10;
+      return formData.customLocation.trim().length >= 2 && formData.description.trim().length >= 10 && turnstileToken !== '';
     }
     if (!formData.location) return false;
     if (!formData.lane) return false;
     if (formData.description.trim().length < 10) return false;
+    if (!turnstileToken) return false; // ต้องมี Turnstile token
     return true;
   };
+
+  // Global callback สำหรับ Turnstile
+  useEffect(() => {
+    window.onTurnstileSuccess = (token) => {
+      setTurnstileToken(token);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
+        {/* Security Badge */}
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+          <Shield className="w-5 h-5 text-green-600" />
+          <p className="text-sm text-green-700">
+            <strong>ระบบปลอดภัย:</strong> ข้อมูลของคุณได้รับการเข้ารหัสและตรวจสอบความถูกต้อง
+          </p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">ระบบแจ้งซ่อม</h1>
@@ -407,6 +453,16 @@ const RepairForm = () => {
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
                   required
                 />
+              </div>
+
+              {/* Cloudflare Turnstile */}
+              <div>
+                <div
+                  className="cf-turnstile"
+                  data-sitekey={process.env.REACT_APP_TURNSTILE_SITE_KEY}
+                  data-callback="onTurnstileSuccess"
+                  data-theme="light"
+                ></div>
               </div>
 
               {/* ปุ่มส่ง */}
