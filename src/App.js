@@ -211,7 +211,7 @@ const RepairForm = () => {
       const apiUrl = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
       
       if (!apiUrl) {
-        console.warn('⚠️ ยังไม่ได้ตั้งค่า REACT_APP_GOOGLE_SCRIPT_URL ใน .env');
+        console.warn('⚠️ ERROR API URL');
         setError('ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
         setIsSubmitting(false);
         return;
