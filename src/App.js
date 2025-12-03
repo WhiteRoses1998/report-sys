@@ -445,7 +445,7 @@ const RepairForm = () => {
               </div>
 
               {/* Cloudflare Turnstile */}
-              <div>
+              <div className="flex justify-center items-center">
                 <div
                   className="cf-turnstile"
                   data-sitekey={process.env.REACT_APP_TURNSTILE_SITE_KEY}
