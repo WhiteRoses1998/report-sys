@@ -361,12 +361,17 @@ const RepairForm = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSubmit),
-      })
-        .then((res) => res.text())
-        .then((text) => {
-          const json = JSON.parse(text);
-          console.log(json);
-        });
+      });
+
+      const text = await response.text();
+      let json = {};
+
+      try {
+        json = JSON.parse(text);
+        console.log("Response:", json);
+      } catch (e) {
+        console.warn("Invalid JSON:", text);
+      }
 
       // mode: 'no-cors' จะไม่ได้ response กลับมา แต่ถ้าไม่ error แสดงว่าส่งสำเร็จ
       setSubmitSuccess(true);
