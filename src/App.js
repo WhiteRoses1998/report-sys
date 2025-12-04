@@ -355,13 +355,18 @@ const RepairForm = () => {
       }
 
       // ส่งข้อมูลจริง
-      const response = await fetch(apiUrl, {
+      const response = await fetch(API_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "text/plain;charset=utf-8",
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(dataToSubmit),
-      });
+        body: JSON.stringify(data),
+      })
+        .then((res) => res.text())
+        .then((text) => {
+          const json = JSON.parse(text);
+          console.log(json);
+        });
 
       // mode: 'no-cors' จะไม่ได้ response กลับมา แต่ถ้าไม่ error แสดงว่าส่งสำเร็จ
       setSubmitSuccess(true);
