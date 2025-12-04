@@ -14,6 +14,7 @@ const RepairForm = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [error, setError] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileWidgetId, setTurnstileWidgetId] = useState(null);
 
   // Load Turnstile script
   useEffect(() => {
@@ -21,12 +22,55 @@ const RepairForm = () => {
     script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
     script.async = true;
     script.defer = true;
+    
+    script.onload = () => {
+      // รอให้ Turnstile พร้อม แล้ว render widget
+      const checkTurnstile = setInterval(() => {
+        if (window.turnstile) {
+          clearInterval(checkTurnstile);
+          renderTurnstileWidget();
+        }
+      }, 100);
+    };
+    
     document.head.appendChild(script);
 
     return () => {
-      document.head.removeChild(script);
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
     };
   }, []);
+
+  // ฟังก์ชัน render Turnstile widget
+  const renderTurnstileWidget = () => {
+    if (window.turnstile && !turnstileWidgetId) {
+      const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY;
+      
+      if (!siteKey) {
+        console.error('Turnstile Site Key not found');
+        return;
+      }
+
+      const widgetId = window.turnstile.render('.cf-turnstile', {
+        sitekey: siteKey,
+        callback: (token) => {
+          console.log('Turnstile success:', token);
+          setTurnstileToken(token);
+        },
+        'error-callback': () => {
+          console.error('Turnstile error');
+          setTurnstileToken('');
+        },
+        'expired-callback': () => {
+          console.log('Turnstile expired');
+          setTurnstileToken('');
+        }
+      });
+      
+      setTurnstileWidgetId(widgetId);
+    }
+  };
 
   // ข้อมูลแผนกและสถานที่
   const departments = [
@@ -105,7 +149,6 @@ const RepairForm = () => {
     // Sanitize input สำหรับ text fields
     if (name === 'customLocation' || name === 'description') {
       const sanitized = sanitizeInput(value);
-      // จำกัดความยาว
       const maxLength = name === 'description' ? 500 : 100;
       const limited = sanitized.slice(0, maxLength);
       setFormData(prev => ({ ...prev, [name]: limited }));
@@ -273,6 +316,12 @@ const RepairForm = () => {
     } catch (error) {
       console.error('Error:', error);
       setError('เกิดข้อผิดพลาดในการส่งข้อมูล กรุณาลองใหม่อีกครั้ง');
+      
+      // รีเซ็ต Turnstile เมื่อเกิด error
+      if (window.turnstile && turnstileWidgetId !== null) {
+        window.turnstile.reset(turnstileWidgetId);
+      }
+      setTurnstileToken('');
     } finally {
       setIsSubmitting(false);
     }
@@ -290,13 +339,6 @@ const RepairForm = () => {
     if (!turnstileToken) return false; // ต้องมี Turnstile token
     return true;
   };
-
-  // Global callback สำหรับ Turnstile
-  useEffect(() => {
-    window.onTurnstileSuccess = (token) => {
-      setTurnstileToken(token);
-    };
-  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
@@ -445,13 +487,16 @@ const RepairForm = () => {
               </div>
 
               {/* Cloudflare Turnstile */}
-              <div className="flex justify-center items-center">
+              <div className='flex items-center justify-center'>
                 <div
                   className="cf-turnstile"
-                  data-sitekey={process.env.REACT_APP_TURNSTILE_SITE_KEY}
-                  data-callback="onTurnstileSuccess"
                   data-theme="light"
                 ></div>
+                {!turnstileToken && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    กรุณายืนยันว่าคุณไม่ใช่บอท
+                  </p>
+                )}
               </div>
 
               {/* ปุ่มส่ง */}
