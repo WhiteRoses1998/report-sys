@@ -355,7 +355,7 @@ const RepairForm = () => {
       }
 
       // ส่งข้อมูลจริง
-      const response = await fetch(API_URL, {
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
