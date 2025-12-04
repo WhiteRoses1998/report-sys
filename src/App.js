@@ -16,75 +16,97 @@ const RepairForm = () => {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileWidgetId, setTurnstileWidgetId] = useState(null);
   const turnstileContainerRef = React.useRef(null);
+  const isLoadingRef = React.useRef(false);
 
   // Load Turnstile script และ render widget เพียงครั้งเดียว
   useEffect(() => {
-    let widgetId = null;
+    // ถ้ากำลังโหลดอยู่ ไม่ต้องทำอะไร
+    if (isLoadingRef.current) return;
     
-    const loadTurnstile = () => {
-      const script = document.createElement('script');
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
-      script.async = true;
-      script.defer = true;
-      
-      // Callback เมื่อ Turnstile โหลดเสร็จ
-      window.onTurnstileLoad = () => {
-        if (turnstileContainerRef.current && !widgetId) {
-          const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY;
-          
-          if (!siteKey) {
-            console.error('❌ Turnstile Site Key not found in .env');
-            return;
-          }
-
-          console.log('🔑 Using Site Key:', siteKey.substring(0, 10) + '...');
-
-          try {
-            widgetId = window.turnstile.render(turnstileContainerRef.current, {
-              sitekey: siteKey,
-              callback: (token) => {
-                console.log('✅ Turnstile verified:', token.substring(0, 20) + '...');
-                setTurnstileToken(token);
-              },
-              'error-callback': () => {
-                console.error('❌ Turnstile error');
-                setTurnstileToken('');
-              },
-              'expired-callback': () => {
-                console.log('⏰ Turnstile expired');
-                setTurnstileToken('');
-              },
-              theme: 'light',
-              size: 'normal'
-            });
-            
-            setTurnstileWidgetId(widgetId);
-            console.log('🎯 Turnstile widget rendered with ID:', widgetId);
-          } catch (error) {
-            console.error('❌ Error rendering Turnstile:', error);
-          }
-        }
-      };
-      
-      document.head.appendChild(script);
-    };
-
-    // โหลด script เฉพาะเมื่อยังไม่มี widget
-    if (!widgetId) {
-      loadTurnstile();
+    // ถ้า Turnstile โหลดแล้ว ให้ render เลย
+    if (window.turnstile) {
+      renderTurnstileWidget();
+      return;
     }
 
-    // Cleanup
+    // ถ้ายังไม่โหลด ให้โหลด script
+    isLoadingRef.current = true;
+    
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.defer = true;
+    
+    script.onload = () => {
+      console.log('✅ Turnstile script loaded');
+      renderTurnstileWidget();
+    };
+    
+    script.onerror = () => {
+      console.error('❌ Failed to load Turnstile script');
+      isLoadingRef.current = false;
+    };
+    
+    document.head.appendChild(script);
+
     return () => {
-      if (widgetId !== null && window.turnstile) {
+      // Cleanup widget on unmount
+      if (turnstileWidgetId !== null && window.turnstile) {
         try {
-          window.turnstile.remove(widgetId);
+          window.turnstile.remove(turnstileWidgetId);
         } catch (e) {
           console.log('Turnstile cleanup:', e);
         }
       }
     };
-  }, []); // Empty dependency = run once
+  }, []);
+
+  // ฟังก์ชัน render Turnstile widget
+  const renderTurnstileWidget = () => {
+    if (!turnstileContainerRef.current) {
+      console.log('⏳ Container not ready');
+      return;
+    }
+
+    if (turnstileWidgetId !== null) {
+      console.log('⚠️ Widget already rendered');
+      return;
+    }
+
+    const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY;
+    
+    if (!siteKey) {
+      console.error('❌ Turnstile Site Key not found in .env');
+      return;
+    }
+
+    console.log('🔑 Using Site Key:', siteKey.substring(0, 10) + '...');
+
+    try {
+      const widgetId = window.turnstile.render(turnstileContainerRef.current, {
+        sitekey: siteKey,
+        callback: (token) => {
+          console.log('✅ Turnstile verified:', token.substring(0, 20) + '...');
+          setTurnstileToken(token);
+        },
+        'error-callback': () => {
+          console.error('❌ Turnstile error');
+          setTurnstileToken('');
+        },
+        'expired-callback': () => {
+          console.log('⏰ Turnstile expired');
+          setTurnstileToken('');
+        },
+        theme: 'light',
+        size: 'normal'
+      });
+      
+      setTurnstileWidgetId(widgetId);
+      console.log('🎯 Turnstile widget rendered with ID:', widgetId);
+    } catch (error) {
+      console.error('❌ Error rendering Turnstile:', error);
+    }
+  };
 
   // ข้อมูลแผนกและสถานที่
   const departments = [
