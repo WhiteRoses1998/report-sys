@@ -15,62 +15,76 @@ const RepairForm = () => {
   const [error, setError] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileWidgetId, setTurnstileWidgetId] = useState(null);
+  const turnstileContainerRef = React.useRef(null);
 
-  // Load Turnstile script
+  // Load Turnstile script และ render widget เพียงครั้งเดียว
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-    script.async = true;
-    script.defer = true;
+    let widgetId = null;
     
-    script.onload = () => {
-      // รอให้ Turnstile พร้อม แล้ว render widget
-      const checkTurnstile = setInterval(() => {
-        if (window.turnstile) {
-          clearInterval(checkTurnstile);
-          renderTurnstileWidget();
-        }
-      }, 100);
-    };
-    
-    document.head.appendChild(script);
-
-    return () => {
-      if (document.head.contains(script)) {
-        document.head.removeChild(script);
-      }
-    };
-  }, []);
-
-  // ฟังก์ชัน render Turnstile widget
-  const renderTurnstileWidget = () => {
-    if (window.turnstile && !turnstileWidgetId) {
-      const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY;
+    const loadTurnstile = () => {
+      const script = document.createElement('script');
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
+      script.async = true;
+      script.defer = true;
       
-      if (!siteKey) {
-        console.error('Turnstile Site Key not found');
-        return;
-      }
+      // Callback เมื่อ Turnstile โหลดเสร็จ
+      window.onTurnstileLoad = () => {
+        if (turnstileContainerRef.current && !widgetId) {
+          const siteKey = process.env.REACT_APP_TURNSTILE_SITE_KEY;
+          
+          if (!siteKey) {
+            console.error('❌ Turnstile Site Key not found in .env');
+            return;
+          }
 
-      const widgetId = window.turnstile.render('.cf-turnstile', {
-        sitekey: siteKey,
-        callback: (token) => {
-          console.log('Turnstile success:', token);
-          setTurnstileToken(token);
-        },
-        'error-callback': () => {
-          console.error('Turnstile error');
-          setTurnstileToken('');
-        },
-        'expired-callback': () => {
-          console.log('Turnstile expired');
-          setTurnstileToken('');
+          console.log('🔑 Using Site Key:', siteKey.substring(0, 10) + '...');
+
+          try {
+            widgetId = window.turnstile.render(turnstileContainerRef.current, {
+              sitekey: siteKey,
+              callback: (token) => {
+                console.log('✅ Turnstile verified:', token.substring(0, 20) + '...');
+                setTurnstileToken(token);
+              },
+              'error-callback': () => {
+                console.error('❌ Turnstile error');
+                setTurnstileToken('');
+              },
+              'expired-callback': () => {
+                console.log('⏰ Turnstile expired');
+                setTurnstileToken('');
+              },
+              theme: 'light',
+              size: 'normal'
+            });
+            
+            setTurnstileWidgetId(widgetId);
+            console.log('🎯 Turnstile widget rendered with ID:', widgetId);
+          } catch (error) {
+            console.error('❌ Error rendering Turnstile:', error);
+          }
         }
-      });
+      };
       
-      setTurnstileWidgetId(widgetId);
+      document.head.appendChild(script);
+    };
+
+    // โหลด script เฉพาะเมื่อยังไม่มี widget
+    if (!widgetId) {
+      loadTurnstile();
     }
-  };
+
+    // Cleanup
+    return () => {
+      if (widgetId !== null && window.turnstile) {
+        try {
+          window.turnstile.remove(widgetId);
+        } catch (e) {
+          console.log('Turnstile cleanup:', e);
+        }
+      }
+    };
+  }, []); // Empty dependency = run once
 
   // ข้อมูลแผนกและสถานที่
   const departments = [
@@ -125,7 +139,9 @@ const RepairForm = () => {
   };
 
   // ฟังก์ชัน validate รหัสพนักงาน
+  // จริงๆ ต้องเป็นตัวเลข 5 หลักพอดี แต่ไม่บอก user
   const validateEmployeeId = (id) => {
+    // ต้องเป็นตัวเลข 5 หลักพอดี
     return /^\d{5}$/.test(id);
   };
 
@@ -140,8 +156,9 @@ const RepairForm = () => {
     const { name, value } = e.target;
     setError(''); // Clear error
     
-    // รหัสพนักงาน
+    // รหัสพนักงาน - อนุญาตให้กรอกอะไรก็ได้ ไม่จำกัด (เพื่อไม่เปิดเผยรูปแบบ)
     if (name === 'employeeId') {
+      // ไม่กรอง ไม่จำกัด ให้กรอกอะไรก็ได้
       setFormData(prev => ({ ...prev, [name]: value }));
       return;
     }
@@ -149,6 +166,7 @@ const RepairForm = () => {
     // Sanitize input สำหรับ text fields
     if (name === 'customLocation' || name === 'description') {
       const sanitized = sanitizeInput(value);
+      // จำกัดความยาว
       const maxLength = name === 'description' ? 500 : 100;
       const limited = sanitized.slice(0, maxLength);
       setFormData(prev => ({ ...prev, [name]: limited }));
@@ -188,7 +206,7 @@ const RepairForm = () => {
       return false;
     }
 
-    // ตรวจสอบรหัสพนักงาน
+    // ตรวจสอบรหัสพนักงาน - ไม่บอกสาเหตุเพื่อความปลอดภัย
     if (!validateEmployeeId(formData.employeeId)) {
       setError('ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง');
       return false;
@@ -275,7 +293,7 @@ const RepairForm = () => {
       const apiUrl = process.env.REACT_APP_GOOGLE_SCRIPT_URL;
       
       if (!apiUrl) {
-        console.warn('⚠️ ERROR API URL');
+        console.error('⚠️ ยังไม่ได้ตั้งค่า REACT_APP_GOOGLE_SCRIPT_URL ใน .env');
         setError('ระบบยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
         setIsSubmitting(false);
         return;
@@ -291,6 +309,7 @@ const RepairForm = () => {
         body: JSON.stringify(dataToSubmit)
       });
 
+      // mode: 'no-cors' จะไม่ได้ response กลับมา แต่ถ้าไม่ error แสดงว่าส่งสำเร็จ
       setSubmitSuccess(true);
       
       // รีเซ็ต Turnstile
@@ -343,6 +362,14 @@ const RepairForm = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
+        {/* Security Badge */}
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+          <Shield className="w-5 h-5 text-green-600" />
+          <p className="text-sm text-green-700">
+            <strong>ระบบปลอดภัย:</strong> ข้อมูลของคุณได้รับการเข้ารหัสและตรวจสอบความถูกต้อง
+          </p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">ระบบแจ้งซ่อม</h1>
@@ -487,14 +514,17 @@ const RepairForm = () => {
               </div>
 
               {/* Cloudflare Turnstile */}
-              <div className='flex items-center justify-center'>
-                <div
-                  className="cf-turnstile"
-                  data-theme="light"
-                ></div>
+              <div>
+                <div ref={turnstileContainerRef}></div>
                 {!turnstileToken && (
                   <p className="mt-2 text-xs text-gray-500">
-                    กรุณายืนยันว่าคุณไม่ใช่บอท
+                    📋 กรุณายืนยันว่าคุณไม่ใช่บอท
+                  </p>
+                )}
+                {turnstileToken && (
+                  <p className="mt-2 text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    ยืนยันสำเร็จ
                   </p>
                 )}
               </div>
